@@ -1,18 +1,18 @@
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE TemplateHaskell #-}
-import           TestPlugins
+{-# LANGUAGE TemplateHaskell   #-}
 import           Neovim
 import           Neovim.API.IPC
 import           Neovim.API.Plugin
 import           Neovim.API.TH
+import           TestPlugins
 
 import           Data.Int          (Int16)
 import           System.Log.Logger
 import           System.Random
 
-main :: IO () 
+main :: IO ()
 main = neovim def
     { plugins = [ randPlugin ]
     , logOptions = Just ("nvim-log.txt", DEBUG)
@@ -25,7 +25,10 @@ randPlugin = do
     g <- newStdGen
     return $ SomePlugin Plugin
       { name = "Random number generator"
-      , functions = [("Return42" , $(function 'return42))]
+      , functions =
+          [ $(function' 'return42)
+          , $(function "succ" 'add1)
+          ]
       , statefulFunctions = [("Random", q), ("Randoom", q)]
       , services = [ ( (), g, nextRand q ) ]
       }
