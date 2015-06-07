@@ -1,5 +1,5 @@
 # nvim-hs-config-example
-Example config reflecting the state of nvim-hs.
+Example config reflecting the state of [nvim-hs](https://github.com/saep/nvim-hs).
 
 # Testing the functions
 
