@@ -3,45 +3,33 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 import           Neovim
-import           Neovim.API.IPC
 import           Neovim.API.Plugin
 import           Neovim.API.TH
 import           TestPlugins
 
-import           Data.Int          (Int16)
 import           System.Log.Logger
 import           System.Random
 
 main :: IO ()
 main = neovim def
     { plugins = [ randPlugin ]
-    , logOptions = Just ("nvim-log.txt", DEBUG)
+    , logOptions = Just ("~/nvim-log.txt", DEBUG)
     }
 
 randPlugin :: IO SomePlugin
 randPlugin = do
     logM "Random" INFO "Starting Rand plugin"
-    q <- newTQueueIO
     g <- newStdGen
     return $ SomePlugin Plugin
-      { name = "Random number generator"
-      , functions =
+      { exports =
           [ $(function' 'return42)
           , $(function "succ" 'add1)
           ]
-      , statefulFunctions = [("Random", q), ("Randoom", q)]
-      , services = [ ( (), g, nextRand q ) ]
+      , statefulExports = [((), g, [$(function' 'nextRand)])]
       }
 
-nextRand :: RandomGen s => TQueue SomeMessage -> Neovim cfg s ()
-nextRand q = do
-    liftIO $ debugM "Random" "nextRand is running"
-    req <- awaitRequest q
-    liftIO $ debugM "Random" "nextRand got a request"
-    if | reqMethod req == "Random" -> do
-         (r,g) <- random <$> get
-         let r' = r :: Int16
-         put g
-         respond (reqId req) (Right (fromIntegral r' :: Int64))
-       | otherwise -> error "Unhandled reqMethod"
-    nextRand q
+nextRand :: Neovim cfg StdGen Int16
+nextRand = do
+    (r,g) <- random <$> get
+    put g
+    return r
