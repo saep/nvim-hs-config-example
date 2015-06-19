@@ -3,8 +3,6 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 import           Neovim
-import           Neovim.API.Plugin
-import           Neovim.API.TH
 import           TestPlugins
 
 import           System.Log.Logger
@@ -13,23 +11,17 @@ import           System.Random
 main :: IO ()
 main = neovim def
     { plugins = [ randPlugin ]
-    , logOptions = Just ("~/nvim-log.txt", DEBUG)
+    , logOptions = Just ("/tmp/nvim-log.txt", DEBUG)
     }
 
-randPlugin :: IO SomePlugin
+randPlugin :: IO NeovimPlugin
 randPlugin = do
     logM "Random" INFO "Starting Rand plugin"
     g <- newStdGen
-    return $ SomePlugin Plugin
+    wrapPlugin Plugin
       { exports =
-          [ $(function' 'return42)
-          , $(function "succ" 'add1)
+          [ $(function' 'return42) Sync
+          , $(function "Succ" 'add1) Sync
           ]
-      , statefulExports = [((), g, [$(function' 'nextRand)])]
+      , statefulExports = [((), g, [$(function "NextRand" 'nextRand) def])]
       }
-
-nextRand :: Neovim cfg StdGen Int16
-nextRand = do
-    (r,g) <- random <$> get
-    put g
-    return r
