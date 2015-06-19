@@ -6,7 +6,13 @@ Example config reflecting the state of [nvim-hs](https://github.com/saep/nvim-hs
 1. Clone the configuration to the XDG_CONFIG_DIR directory.
 > git clone git@github.com:saep/nvim-hs-config-example.git ~/.config/nvim
 
-2. Make sure that it compiles.
+2. Make sure that the configuration compiles.
+  
+   Note that a builtin plugin is in development that will help you with this. But
+   until that works properly, you have to be able to debug it by hand. To initiate
+   recompilation, you can simply call `nvim-hs --help`. If `~/.cache/nvim/errors.log`
+   is empty, it has successfully compiled. Otherwise, there is the ghc compilation
+   error log inside that file.
 
 3. Put
 
