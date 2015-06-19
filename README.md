@@ -10,16 +10,33 @@ Example config reflecting the state of [nvim-hs](https://github.com/saep/nvim-hs
 
 3. Put
 
-   > let g:haskellChan = rpcstart("/path/to/nvim-hs", [])
+   ```vimL
+   if has("nvim")
+     " Define an arbitrary name for the provider
+     let s:nvimhsName
+     " Create a factory function to intialize 
+     " an nvim-hs provider
+     function! s:RequireHaskellHost(name)
+       " Or replace with fully qualified path 
+       " if the nvim-hs exectuable is not on your path
+       return rpcstart("nvim-hs", ['-n',a:name])
+     endfunction
+
+     " Register the factory function
+     call remote#host#Register(s:nvimhsName, function('s:RequireHaskellHost'))
+     " Force initialization by calling the 'Ping' function.
+     " This may be required if you happen to call functions
+     " before they are regisitered with neovim. This has something to do with
+     " the asynchronous nature of starting the plugin provider and cannot
+     " really be mitgated well otherwise.
+     call rpcrequest(remote#host#Require(s:nvimhsName), 'Ping')
+   endif
+   ```
 
    inside your neovim configuration.
 
-4. Call the functions like so:
-
-   > :let i = rpcrequest(g:haskellChan, "Random")
-
-5. Inspect the value with:
-
-   > :echo i
+4. You chould now be able to call functions and commands. Some functionality 
+   may not work yet (especially with regard to defining commands). Please open
+   issue requests for those!
 
 
