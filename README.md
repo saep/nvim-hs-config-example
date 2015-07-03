@@ -29,7 +29,7 @@ Example config reflecting the state of [nvim-hs](https://github.com/saep/nvim-hs
      endfunction
 
      " Register the factory function
-     call remote#host#Register(s:nvimhsName, function('s:RequireHaskellHost'))
+     call remote#host#Register(s:nvimhsName, "*.l\?hs", function('s:RequireHaskellHost'))
      " Force initialization by calling the 'Ping' function.
      " This may be required if you happen to call functions
      " before they are regisitered with neovim. This has something to do with
