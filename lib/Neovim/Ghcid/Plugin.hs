@@ -18,20 +18,21 @@ module Neovim.Ghcid.Plugin
 import           Data.Yaml
 import           GHC.Generics
 import           Neovim
-import           Neovim.Quickfix        as Q
-import           Neovim.User.Choice     (yesOrNo)
+import           Neovim.Quickfix              as Q
+import           Neovim.User.Choice           (yesOrNo)
 import           Neovim.User.Input
 
-import           Language.Haskell.Ghcid as Ghcid
+import           Language.Haskell.Ghcid       as Ghcid
 
 import           Control.Monad
 import qualified Control.Monad.Trans.Resource as Resource
-import qualified Data.ByteString as BS
-import           Data.Char              (toLower)
-import           Data.List              (isPrefixOf, isSuffixOf)
-import           Data.Map               (Map)
-import qualified Data.Map               as Map
-import           Data.Maybe             (fromMaybe, mapMaybe, isJust)
+import qualified Data.ByteString              as BS
+import           Data.Char                    (toLower)
+import           Data.Either                  (rights)
+import           Data.List                    (isPrefixOf, isSuffixOf, groupBy, sort)
+import           Data.Map                     (Map)
+import qualified Data.Map                     as Map
+import           Data.Maybe                   (fromMaybe, isJust, mapMaybe)
 import           System.Directory
 import           System.FilePath
 
@@ -58,6 +59,8 @@ data GhcidState r = GhcidState
     -- ^ A map from the root directory (see 'rootDir') to a 'Ghci' session and a
     -- release function which unregisters some autocmds and stops the ghci
     -- session.
+
+    , quickfixItems   :: [QuickfixListItem String]
     }
 
 
@@ -102,7 +105,7 @@ startOrReload :: ProjectSettings -> Neovim r (GhcidState r) ()
 startOrReload s@(ProjectSettings d c) = Map.lookup d <$> gets startedSessions >>= \case
     Nothing -> do
         (g, ls) <- liftIO $ startGhci c (Just d) False
-        setqflist (loadToQuickfix ls) Replace
+        applyQuickfixActions $ loadToQuickfix ls
         void $ vim_command "cwindow"
         ra <- addAutocmd "BufWritePost" def (startOrReload s) >>= \case
             Nothing ->
@@ -117,11 +120,42 @@ startOrReload s@(ProjectSettings d c) = Map.lookup d <$> gets startedSessions >>
         modifyStartedSessions $ Map.insert d (g,ra >> liftIO (stopGhci g))
 
     Just (ghci, ra) -> do
-        ls <- liftIO $ reload ghci
-        setqflist (loadToQuickfix ls) Replace
+        applyQuickfixActions =<< loadToQuickfix <$> liftIO (reload ghci)
         void $ vim_command "cwindow"
-        modifyStartedSessions $ Map.insert d (ghci, ra)
 
+
+applyQuickfixActions :: [QuickfixListItem String] -> Neovim r (GhcidState r) ()
+applyQuickfixActions qs = do
+    fqs <- (nub' . rights . map bufOrFile) <$> gets quickfixItems
+    modify $ \s -> s { quickfixItems = qs }
+    forM_ fqs $ \f -> void . vim_command $ "sign unplace * file=" <> f
+    setqflist qs Replace
+    placeSigns qs
+  where
+    nub' = map head . groupBy (==) . sort
+
+
+placeSigns :: [QuickfixListItem String] -> Neovim r st ()
+placeSigns qs = forM_ (zip [1..] qs) $ \(i, q) -> case (lnumOrPattern q, bufOrFile q) of
+    (Right _, _) ->
+        -- Patterns not handled as they are not produced
+        return ()
+
+    (_, Left _) ->
+        -- Buffer type not handled because i don't know how to pass that here
+        -- and it is not produced.
+        return ()
+
+    (Left lnum, Right f) -> do
+        let signType = case errorType q of
+                Q.Error -> "GhcidErr"
+                Q.Warning -> "GhcidWarn"
+
+        -- TODO What if the file name contains spaces?
+        void . vim_command $ unwords
+            [ "sign place", show i, "line=" <> show lnum
+            , "name=" <> signType, "file=" <> f
+            ]
 
 -- | Stop a ghcid session associated to the currently active buffer.
 ghcidStop :: CommandArguments -> Neovim r (GhcidState r) ()
@@ -135,8 +169,15 @@ ghcidStop _ = do
             releaseAction
 
 
+-- | Same as @:GhcidStop@ followed by @:GhcidStart!@. Note the bang!
+ghcidRestart :: CommandArguments -> Neovim r (GhcidState r) ()
+ghcidRestart _ = do
+    ghcidStop def
+    ghcidStart def { bang = Just True }
+
+
 loadToQuickfix :: [Load] -> [QuickfixListItem String]
-loadToQuickfix = mapMaybe f
+loadToQuickfix = dropWarningsIfErrorsArePresent . mapMaybe f
   where
     f m@Message{} =
         Just $ (quickfixListItem
@@ -149,6 +190,11 @@ loadToQuickfix = mapMaybe f
                         _             -> Q.Error
                     }
     f _ = Nothing
+
+    dropWarningsIfErrorsArePresent xs =
+        case filter ((== Q.Error) . errorType) xs of
+            [] -> xs
+            xs' -> xs'
 
 
 -- | Calculate the list of all parent directories for the given directory. This

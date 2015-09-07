@@ -20,12 +20,16 @@ import Neovim.Ghcid.Plugin
 import qualified Data.Map as Map
 
 plugin :: Neovim (StartupConfig NeovimConfig) () NeovimPlugin
-plugin = wrapPlugin Plugin
-    { exports = []
-    , statefulExports =
-        [ ((), GhcidState Map.empty,
-            [ $(command' 'ghcidStart) ["async", "!"]
-            , $(command' 'ghcidStop) ["async"]
-            ])
-        ]
-    }
+plugin = do
+    vim_command "sign define GhcidWarn text=>> texthl=Search"
+    vim_command "sign define GhcidErr text=!! texthl=ErrorMsg"
+    wrapPlugin Plugin
+        { exports = []
+        , statefulExports =
+            [ ((), GhcidState Map.empty [],
+                [ $(command' 'ghcidStart) ["async", "!"]
+                , $(command' 'ghcidStop) ["async"]
+                , $(command' 'ghcidRestart) ["async"]
+                ])
+            ]
+        }
